@@ -4,99 +4,96 @@ const { readdir, rm, mkdir, copyFile, writeFile } = require('fs/promises');
 
 const buildPage = async () => {
   try {
-    const __projectFolder = path.join(__dirname, 'project-dist');
-    const files = await readdir(__dirname);
+    const __distFolder = path.join(__dirname, 'project-dist');
+    const distInFolder = await readdir(__dirname);
 
-    if (files.includes('project-dist')) {
-      await rm(__projectFolder, { recursive: true });
+    if (distInFolder.includes('project-dist')) {
+      await rm(__distFolder, { recursive: true });
     }
-    await mkdir(__projectFolder);
 
-    copyDir(__currentFolder, __copyFolder);
-    mergeStyles(__projectFolder);
-    createHtml();
+    copyAssets(__distFolder);
+    mergeStyles(__distFolder);
+    createHtml(__distFolder);
+
   } catch (err) {
     console.log(err);
   }
 };
-buildPage();
+
+const copyAssets = async (src) => {
+  try {
+    const __assetsFolder = path.join(__dirname, 'assets');
+    const __assetsDistFolder = path.join(src, 'assets');
+    await mkdir(src, { recursive: true });
+    await mkdir(__assetsDistFolder, { recursive: true });
+    copyDir(__assetsFolder, __assetsDistFolder);
+
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+const copyDir = async (src, srcDist) => {
+  try {
+    const files = await readdir(src);
+    for (const file of files) {
+      const __currentPath = path.join(src, file);
+      const __currentDistPath = path.join(srcDist, file);
+      fs.stat(__currentPath, (err, stats) => {
+        if (!stats.isFile()) {
+          mkdir(__currentDistPath);
+          copyDir( __currentPath,__currentDistPath,);
+        } else {
+          copyFile((__currentPath), (__currentDistPath));
+        }
+      });
+    }
+  } catch (err) {
+    console.log(err);
+  }
+};
 
 const mergeStyles = async (src) => {
   try {
     const __stylesFolder = path.join(__dirname, 'styles');
-    const filesInFolder = await readdir(__stylesFolder, {
-      withFileTypes: true,
-    });
-    const bundlePath = path.join(src, 'style.css');
-    const outputFile = fs.createWriteStream(bundlePath);
-
-    for (const file of filesInFolder) {
-      const pathFile = path.join(file.path, file.name);
-      const typeOfFile = path.extname(pathFile);
-
-      if (file.isFile() && typeOfFile === '.css') {
-        const stream = fs.createReadStream(pathFile, 'utf-8');
-        stream.pipe(outputFile);
-      }
+    const stylesFiles = await readdir(__stylesFolder);
+    const __stylePath = path.join(src, 'style.css');
+    const output = fs.createWriteStream(__stylePath);
+    for (const file of stylesFiles) {
+      const pathFile = path.join(__stylesFolder, file);
+      fs.stat(pathFile, (err, stats) => {
+        if (stats.isFile() && path.extname(file) === '.css') {
+          const stream = fs.createReadStream(pathFile, 'utf-8');
+          stream.pipe(output);
+        }
+      });
     }
   } catch (err) {
     console.log(err);
   }
 };
 
-const copyDir = async (pathFolder, pathCopyFolder) => {
+const createHtml = async (src) => {
   try {
-    const filesInFolder = await readdir(pathFolder, {
-      withFileTypes: true,
-    });
-
-    await mkdir(pathCopyFolder);
-
-    for (const file of filesInFolder) {
-      if (file.isDirectory()) {
-        copyDir(
-          path.join(pathFolder, file.name),
-          path.join(pathCopyFolder, file.name),
-        );
-      } else {
-        copyFile(
-          path.join(pathFolder, file.name),
-          path.join(pathCopyFolder, file.name),
-        );
-      }
-    }
-  } catch (err) {
-    console.log(err);
-  }
-};
-
-const __currentFolder = path.join(__dirname, 'assets');
-const __copyFolder = path.join(__dirname, 'project-dist', 'assets');
-
-const createHtml = async () => {
-  try {
-    const pathComponents = path.join(__dirname, 'components');
-    const pathIndexFile = path.join(__dirname, 'project-dist', 'index.html');
-    const filesComponents = await readdir(pathComponents, {
-      withFileTypes: true,
-    });
+    const __htmlDistPath = path.join(src, 'index.html');
+    const __htmlPath = path.join(__dirname, 'template.html');
+    const __compPath = path.join(__dirname, 'components');
+    const filesInComp = await readdir(__compPath);
     let data = '';
-    const fileTemplate = path.join(__dirname, 'template.html');
-    const stream = fs.createReadStream(pathIndexFile, 'utf-8');
-    await copyFile(fileTemplate, pathIndexFile);
-    stream.on('data', (chunk) => (data += chunk));
+    const stream = fs.createReadStream(__htmlPath, 'utf-8');
+    stream.on('data', chunk => data += chunk);
     stream.on('end', () => changeTags(data));
 
-    const changeTags = (dataTemplate) => {
-      for (const file of filesComponents) {
-        const fileName = file.name.split('.')[0];
-        const filePath = path.join(file.path, file.name);
-        const currentStream = fs.createReadStream(filePath, 'utf-8');
+    let changeTags = (dataTemplate) => {
+      for (const file of filesInComp) {
+        const __fileName = path.basename(file, '.html');
+        const __filePath = path.join(__compPath, file);
+        const currentStream = fs.createReadStream(__filePath, 'utf-8');
         let currentData = '';
-        currentStream.on('data', (chunk) => (currentData += chunk));
+        currentStream.on('data', chunk => currentData += chunk);
         currentStream.on('end', () => {
-          dataTemplate = dataTemplate.replace(`{{${fileName}}}`, currentData);
-          writeFile(pathIndexFile, dataTemplate);
+          dataTemplate = dataTemplate.replace(`{{${__fileName}}}`, currentData);
+          writeFile(__htmlDistPath, dataTemplate);
         });
       }
     };
@@ -104,3 +101,4 @@ const createHtml = async () => {
     console.log(err);
   }
 };
+buildPage();
